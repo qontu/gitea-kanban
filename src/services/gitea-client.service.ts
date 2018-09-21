@@ -1,4 +1,6 @@
 import { HttpService } from "./http.service";
+import { Issue, StateType } from "../models/issue";
+import { Label } from "../models/label";
 
 interface GiteaClientConfig {
   token: string;
@@ -30,19 +32,48 @@ export class GiteaClient {
     });
   }
 
-  public getIssues() {
-    return this.http.get(`${this.wholeUrl}/issues`);
+  async getAllIssues() {
+    const open = await this.http.get<Issue[]>(`${this.wholeUrl}/issues`);
+    const closed = await this.http.get<Issue[]>(`${this.wholeUrl}/issues?q=&state=${StateType.CLOSED}`);
+
+    return [...open, ...closed];
   }
 
-  public getLabels() {
-    return this.http.get(`${this.wholeUrl}/labels`);
+  getIssues() {
+    return this.http.get<Issue[]>(`${this.wholeUrl}/issues`);
   }
 
-  public addLabels(issueID: number, labelIDs: number[]) {
-    return this.http.post(`${this.wholeUrl}/issues/${issueID}/labels`, { labels: labelIDs });
+  openIssue(id: number) {
+    return this.updateIssue(id, {
+      state: StateType.OPEN,
+    });
   }
 
-  public async deleteLabel(issueID: number, labelId: number) {
-    return this.http.delete(`${this.wholeUrl}/issues/${issueID}/labels/${labelId}`);
+  closeIssue(id: number) {
+    return this.updateIssue(id, {
+      state: StateType.CLOSED,
+    });
+  }
+
+  updateIssue(id: number, issue: Partial<Issue>) {
+    return this.http.patch<Issue[], Issue>(`${this.wholeUrl}/issues/${id}`, issue);
+  }
+
+  getIssue(id: number) {
+    return this.http.get<Issue>(`${this.wholeUrl}/issues/${id}`);
+  }
+
+  getLabels() {
+    return this.http.get<Label[]>(`${this.wholeUrl}/labels`);
+  }
+
+  addLabels(issueID: number, labelIDs: number[]) {
+    return this.http.post<Label, { labels: number[] }>(`${this.wholeUrl}/issues/${issueID}/labels`, {
+      labels: labelIDs,
+    });
+  }
+
+  deleteLabel(issueID: number, labelID: number) {
+    return this.http.delete(`${this.wholeUrl}/issues/${issueID}/labels/${labelID}`);
   }
 }

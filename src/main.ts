@@ -1,9 +1,9 @@
 import Vue from "vue";
 import App from "./App.vue";
-import vueKanban from "vue-kanban";
+import VueKanban from "vue-kanban";
 
 Vue.config.productionTip = false;
-Vue.use(vueKanban);
+Vue.use(VueKanban);
 
 new Vue({
   render: h => h(App),

@@ -18,48 +18,66 @@
 
 <script lang="ts">
 import { Component, Vue } from "vue-property-decorator";
+import { Issue, StateType } from "./models/issue";
+import { Label } from "./models/label";
 import { GiteaClient } from "./services/gitea-client.service";
 import giteaConfig from "./gitea.config.json";
+
+interface Block {
+  id: number;
+  title: string;
+  status: string;
+  statusID: number;
+  closed: boolean;
+}
+
+interface Stage {
+  id: number;
+  label: string;
+  name: string;
+  isClosedStage?: boolean;
+}
 
 @Component({
   components: {},
 })
 export default class App extends Vue {
-  public stages = ["TODO", "BLOCKED", "WIP", "READY-TO-REVIEW", "DONE"];
-  public labels = {
+  stages = ["TODO", "BLOCKED", "WIP", "READY-TO-REVIEW", "DONE"];
+  labels: Record<string, Stage> = {
     "status/todo": {
       label: "status/todo",
-      stage: "TODO",
+      name: "TODO",
       id: -1,
     },
     "status/blocked": {
       label: "status/blocked",
-      stage: "BLOCKED",
+      name: "BLOCKED",
       id: -1,
     },
     "status/in progress": {
-      label: "status/todo",
-      stage: "WIP",
+      label: "status/in progress",
+      name: "WIP",
       id: -1,
     },
     "status/needsReview": {
-      label: "status/todo",
-      stage: "READY-TO-REVIEW",
+      label: "status/needsReview",
+      name: "READY-TO-REVIEW",
       id: -1,
     },
     "status/done": {
-      label: "status/todo",
-      stage: "DONE",
+      label: "status/done",
+      name: "DONE",
       id: -1,
+      isClosedStage: true,
     },
   };
 
-  public blocks: any[] = [];
-  private giteaClient: GiteaClient;
+  blocks: Block[] = [];
+  private client: GiteaClient;
 
   constructor() {
     super();
-    this.giteaClient = new GiteaClient(giteaConfig);
+    this.client = new GiteaClient(giteaConfig);
   }
 
   async created() {
@@ -67,36 +85,76 @@ export default class App extends Vue {
     await this.loadLabels();
   }
 
-  async updateBlock(id: number, newStage: string) {
-    const { statusID: oldLabelID } = this.blocks.find(({ id: _id }) => _id.toString() === id);
-    const { id: newLabelID } = Object.values(this.labels).find(({ stage }) => stage === newStage);
+  async updateBlock(issueID: string, newStage: string) {
+    const block = this.getBlock(Number.parseInt(issueID, 10));
+    const stage = this.getStageByName(newStage);
 
-    await Promise.all([this.giteaClient.deleteLabel(id, oldLabelID), this.giteaClient.addLabels(id, [newLabelID])]);
+    if (stage.isClosedStage) {
+      await this.client.closeIssue(issueID as any);
+      block.closed = true;
+    } else if (block.closed) {
+      await this.client.openIssue(issueID as any);
+    }
 
-    setTimeout(this.loadIssues.bind(this));
+    await this.replaceLabelOfIssue(issueID as any, block.statusID, stage.id);
+    this.updateStageOfBlock(block, stage);
   }
 
-  private proccessIssues(issues: any[]) {
+  async replaceLabelOfIssue(issueID: number, oldLabelID: number, newLabelID: number) {
+    await this.client.deleteLabel(issueID, oldLabelID);
+    await this.client.addLabels(issueID, [newLabelID]);
+  }
+
+  updateStageOfBlock(block: Block, { name, id }: Stage) {
+    block.status = name;
+    block.statusID = id;
+  }
+
+  getBlock(id: number): Block {
+    return this.blocks.find(({ id: _id }) => _id === id);
+  }
+
+  getStageByName(name: string): Stage {
+    return this.getStageBy("name", name);
+  }
+
+  getStageByLabel(label: string): Stage {
+    return this.getStageBy("label", label);
+  }
+
+  private getStageBy(prop: keyof Stage, predicate: string): Stage {
+    return Object.values(this.labels).find(({ [prop]: propValue }) => propValue === predicate);
+  }
+
+  private proccessIssues(issues: Issue[]) {
     this.blocks = issues
-      .filter(issue => issue.labels && issue.labels.length > 0)
-      .filter(issue => issue.labels.some(({ name }) => Object.keys(this.labels).includes(name)))
-      .map(issue => ({ ...issue, kanban: issue.labels.find(({ name }) => Object.keys(this.labels).includes(name)) }))
-      .map(({ number: id, title, kanban }) => ({
+      .map(issue => ({ ...issue, label: this.getLabelIfExistsOnStages(issue.labels) }))
+      .filter(({ label }) => label)
+      .map(({ title, state, number: id, label: { name, id: labelID } }) => ({
         id,
         title,
-        status: this.labels[kanban.name].stage,
-        statusID: kanban.id,
+        closed: state === StateType.CLOSED,
+        status: this.translateLabelNameToStage(name),
+        statusID: labelID,
       }));
   }
 
+  private getLabelIfExistsOnStages(labels: Label[]): Label | undefined {
+    return labels.find(({ name }) => Object.keys(this.labels).includes(name));
+  }
+
+  private translateLabelNameToStage(labelName: string): string {
+    return this.labels[labelName].name;
+  }
+
   private async loadIssues() {
-    const issues = await this.giteaClient.getIssues();
+    const issues = await this.client.getAllIssues();
     console.log(issues);
     this.proccessIssues(issues);
   }
 
   private async loadLabels() {
-    const labels = await this.giteaClient.getLabels();
+    const labels = await this.client.getLabels();
     console.log(labels);
     labels.forEach(({ name, id }) => this.labels[name] && (this.labels[name].id = id));
   }
