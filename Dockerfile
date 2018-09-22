@@ -3,7 +3,11 @@
 FROM mhart/alpine-node:10 AS builder
 MAINTAINER justprops
 
-WORKDIR /var/www/html
+COPY . /app
+WORKDIR /app
+
+RUN yarn
+RUN yarn build
 
 
 
@@ -16,4 +20,5 @@ RUN mkdir -p /var/www/html
 EXPOSE 80
 
 COPY docker/Caddyfile /etc/Caddyfile
-COPY --from=builder /dist /var/www/html
+COPY --from=builder /app/dist /var/www/html
+WORKDIR /var/www/html
