@@ -10,19 +10,23 @@ interface GiteaClientConfig {
 }
 
 export class GiteaClient {
-  private baseUrl: string;
+  private baseURL: string;
+  private apiURL: string;
+  private repoURL: string;
   private repositoryOwner: string;
   private repositoryName: string;
   private token: string;
-  private wholeUrl: string;
   private http: HttpService;
 
   constructor(config: GiteaClientConfig) {
     this.repositoryName = config.repositoryName;
     this.repositoryOwner = config.repositoryOwner;
     this.token = config.token;
-    this.baseUrl = config.baseUrl;
-    this.wholeUrl = `${this.baseUrl}/api/v1/repos/${this.repositoryOwner}/${this.repositoryName}`;
+
+    this.baseURL = config.baseUrl;
+    this.apiURL = `${this.baseURL}/api/v1/repos/${this.repositoryOwner}/${this.repositoryName}`;
+    this.repoURL = `${this.baseURL}${this.repositoryOwner}/${this.repositoryName}`;
+
     this.http = new HttpService({
       cache: "no-cache",
       headers: {
@@ -32,15 +36,19 @@ export class GiteaClient {
     });
   }
 
+  getLinkOfIssue(id: number) {
+    return `${this.repoURL}/issues/${id}`;
+  }
+
   async getAllIssues() {
-    const open = await this.http.get<Issue[]>(`${this.wholeUrl}/issues`);
-    const closed = await this.http.get<Issue[]>(`${this.wholeUrl}/issues?q=&state=${StateType.CLOSED}`);
+    const open = await this.http.get<Issue[]>(`${this.apiURL}/issues`);
+    const closed = await this.http.get<Issue[]>(`${this.apiURL}/issues?q=&state=${StateType.CLOSED}`);
 
     return [...open, ...closed];
   }
 
   getIssues() {
-    return this.http.get<Issue[]>(`${this.wholeUrl}/issues`);
+    return this.http.get<Issue[]>(`${this.apiURL}/issues`);
   }
 
   openIssue(id: number) {
@@ -56,24 +64,28 @@ export class GiteaClient {
   }
 
   updateIssue(id: number, issue: Partial<Issue>) {
-    return this.http.patch<Issue[], Issue>(`${this.wholeUrl}/issues/${id}`, issue);
+    return this.http.patch<Issue[], Issue>(`${this.apiURL}/issues/${id}`, issue);
   }
 
   getIssue(id: number) {
-    return this.http.get<Issue>(`${this.wholeUrl}/issues/${id}`);
+    return this.http.get<Issue>(`${this.apiURL}/issues/${id}`);
   }
 
   getLabels() {
-    return this.http.get<Label[]>(`${this.wholeUrl}/labels`);
+    return this.http.get<Label[]>(`${this.apiURL}/labels`);
   }
 
   addLabels(issueID: number, labelIDs: number[]) {
-    return this.http.post<Label, { labels: number[] }>(`${this.wholeUrl}/issues/${issueID}/labels`, {
+    return this.http.post<Label, { labels: number[] }>(`${this.apiURL}/issues/${issueID}/labels`, {
       labels: labelIDs,
     });
   }
 
   deleteLabel(issueID: number, labelID: number) {
-    return this.http.delete(`${this.wholeUrl}/issues/${issueID}/labels/${labelID}`);
+    return this.http.delete(`${this.apiURL}/issues/${issueID}/labels/${labelID}`);
+  }
+
+  getFile(filepath: string) {
+    return this.http.get<string>(`${this.apiURL}/raw/${filepath}`, { noJSON: true });
   }
 }

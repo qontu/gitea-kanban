@@ -1,103 +1,134 @@
 <template>
-  <div id="app">
-<kanban-board :stages="stages" :blocks="blocks" @update-block="updateBlock">
-    <div v-for="stage in stages" :slot="stage" :key="stage">
-      <h2>{{ stage }}</h2>
+  <div id="app" ref="app">
+    <div id="cover-spin" v-if="isLoading">
+      <atom-spinner
+          :animation-duration="1000"
+          :size="100"
+          :color="'#ff1d5e'"
+      />
     </div>
-    <div v-for="block in blocks" :slot="block.id" :key="block.id">
-      <div>
-        <strong>id:</strong> {{ block.id }}
+    <kanban-board :stages="stageNames" :blocks="blocks" @update-block="updateBlock">
+        <div v-for="stage in stageNames" :slot="stage" :key="stage">
+          <h2>{{ stage }}</h2>
+        </div>
+        <div v-for="block in blocks" :slot="block.id" :key="block.id">
+          <div>
+            <strong>id:</strong> {{ block.id }}
+          </div>
+          <div>
+            {{ block.title }}
+          </div>
+          <div v-if="block.closed">
+            Closed!
+          </div>
+          <a :href="client.getLinkOfIssue(block.id)">Link</a>
       </div>
-      <div>
-        {{ block.title }}
-      </div>
-  </div>
-</kanban-board>
+    </kanban-board>
   </div>
 </template>
 
 <script lang="ts">
 import { Component, Vue } from "vue-property-decorator";
-import { Issue, StateType } from "./models/issue";
-import { Label } from "./models/label";
+import { AtomSpinner } from "epic-spinners";
+import { oneLine } from "common-tags";
+
+import { Issue, StateType, Label } from "./models";
+import { StageList, Stage, Config, Block } from "./types";
+
 import { GiteaClient } from "./services/gitea-client.service";
 import giteaConfig from "./gitea.config.json";
 
-interface Block {
-  id: number;
-  title: string;
-  status: string;
-  statusID: number;
-  closed: boolean;
-}
-
-interface Stage {
-  id: number;
-  label: string;
-  name: string;
-  isClosedStage?: boolean;
-}
-
-@Component({
-  components: {},
-})
-export default class App extends Vue {
-  stages = ["TODO", "BLOCKED", "WIP", "READY-TO-REVIEW", "DONE"];
-  labels: Record<string, Stage> = {
-    "status/todo": {
+const fallbackConfig: Config = {
+  stages: [
+    {
       label: "status/todo",
       name: "TODO",
-      id: -1,
     },
-    "status/blocked": {
+    {
       label: "status/blocked",
       name: "BLOCKED",
-      id: -1,
     },
-    "status/in progress": {
+    {
       label: "status/in progress",
       name: "WIP",
-      id: -1,
     },
-    "status/needsReview": {
+    {
       label: "status/needsReview",
       name: "READY-TO-REVIEW",
-      id: -1,
     },
-    "status/done": {
+    {
       label: "status/done",
       name: "DONE",
-      id: -1,
       isClosedStage: true,
     },
-  };
+  ],
+};
+
+@Component({
+  components: {
+    AtomSpinner,
+  },
+})
+export default class App extends Vue {
+  get stageNames() {
+    return this.stages.getStageNames();
+  }
+  isLoading = false;
+  stages: StageList = new StageList([{ name: "" } as Stage]);
 
   blocks: Block[] = [];
   private client: GiteaClient;
+  private config: Config;
+  private styles: HTMLStyleElement;
 
   constructor() {
     super();
     this.client = new GiteaClient(giteaConfig);
   }
 
+  async beforeCreate() {
+    const app = document.getElementById("app");
+
+    const styles = document.createElement("style");
+    styles.type = "text/css";
+
+    this.styles = styles;
+  }
+
   async created() {
+    try {
+      this.config = await this.loadConfig();
+    } catch {
+      this.config = fallbackConfig;
+    }
+
+    this.stages = await this.fetchStages();
+
+    this.setStyles();
+
     await this.loadIssues();
-    await this.loadLabels();
+  }
+
+  mounted() {
+    (this.$refs.app as Element).appendChild(this.styles);
   }
 
   async updateBlock(issueID: string, newStage: string) {
+    this.isLoading = true;
     const block = this.getBlock(Number.parseInt(issueID, 10));
-    const stage = this.getStageByName(newStage);
+    const stage = this.stages.getStageByName(newStage);
 
     if (stage.isClosedStage) {
       await this.client.closeIssue(issueID as any);
       block.closed = true;
     } else if (block.closed) {
       await this.client.openIssue(issueID as any);
+      block.closed = false;
     }
 
     await this.replaceLabelOfIssue(issueID as any, block.statusID, stage.id);
     this.updateStageOfBlock(block, stage);
+    this.isLoading = false;
   }
 
   async replaceLabelOfIssue(issueID: number, oldLabelID: number, newLabelID: number) {
@@ -114,16 +145,17 @@ export default class App extends Vue {
     return this.blocks.find(({ id: _id }) => _id === id);
   }
 
-  getStageByName(name: string): Stage {
-    return this.getStageBy("name", name);
-  }
+  private setStyles(): void {
+    this.styles.innerText = this.stages.get().reduce((styles, { name, color }) => {
+      return oneLine`
+      ${styles}
 
-  getStageByLabel(label: string): Stage {
-    return this.getStageBy("label", label);
-  }
-
-  private getStageBy(prop: keyof Stage, predicate: string): Stage {
-    return Object.values(this.labels).find(({ [prop]: propValue }) => propValue === predicate);
+      .drag-column-${name} .drag-column-header,
+      .drag-column-${name} .drag-options,
+      .drag-column-${name} .is-moved {
+        background: #${color};
+      }`;
+    }, "");
   }
 
   private proccessIssues(issues: Issue[]) {
@@ -140,11 +172,12 @@ export default class App extends Vue {
   }
 
   private getLabelIfExistsOnStages(labels: Label[]): Label | undefined {
-    return labels.find(({ name }) => Object.keys(this.labels).includes(name));
+    const labelNames = this.stages.getLabelNames();
+    return labels.find(({ name }) => labelNames.includes(name));
   }
 
   private translateLabelNameToStage(labelName: string): string {
-    return this.labels[labelName].name;
+    return this.stages.getStageByLabel(labelName).name;
   }
 
   private async loadIssues() {
@@ -153,15 +186,50 @@ export default class App extends Vue {
     this.proccessIssues(issues);
   }
 
-  private async loadLabels() {
+  private async fetchStages(): Promise<StageList> {
     const labels = await this.client.getLabels();
+    const stages = new StageList(this.config.stages as Stage[]);
+    const labelNames: string[] = stages.getLabelNames();
+
     console.log(labels);
-    labels.forEach(({ name, id }) => this.labels[name] && (this.labels[name].id = id));
+
+    labels.filter(({ name }) => labelNames.includes(name)).forEach(({ name, id, color }) => {
+      const stage = stages.getStageByLabel(name);
+      stage.color = color;
+      stage.id = id;
+    });
+
+    return stages;
+  }
+
+  private async loadConfig() {
+    return JSON.parse(await this.client.getFile(".kanban.config.json"));
   }
 }
 </script>
 
 <style lang="scss">
+#cover-spin {
+  position: fixed;
+  width: 100%;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background-color: rgba(29, 25, 25, 0.7);
+  z-index: 9998;
+}
+
+.atom-spinner {
+  z-index: 9999;
+  display: block;
+  position: absolute;
+  left: 48%;
+  top: 40%;
+  width: 40px;
+  height: 40px;
+}
+
 @import "~vue-kanban/src/assets/kanban.scss";
 
 ul.drag-inner-list,
@@ -297,31 +365,6 @@ body {
   font-weight: 300;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-}
-.drag-column-TODO .drag-column-header,
-.drag-column-TODO .drag-options,
-.drag-column-TODO .is-moved {
-  background: #fb7d44;
-}
-.drag-column-BLOCKED .drag-column-header,
-.drag-column-BLOCKED .drag-options,
-.drag-column-BLOCKED .is-moved {
-  background: #2a92bf;
-}
-.drag-column-WIP .drag-column-header,
-.drag-column-WIP .drag-options,
-.drag-column-WIP .is-moved {
-  background: rgb(245, 18, 207);
-}
-.drag-column-READY-TO-REVIEW .drag-column-header,
-.drag-column-READY-TO-REVIEW .drag-options,
-.drag-column-READY-TO-REVIEW .is-moved {
-  background: #f4ce46;
-}
-.drag-column-DONE .drag-column-header,
-.drag-column-DONE .drag-options,
-.drag-column-DONE .is-moved {
-  background: #00b961;
 }
 .section {
   padding: 20px;
