@@ -1,0 +1,10 @@
+:80 {
+    log stdout
+    errors stderr
+
+    rewrite {
+    	to {path} {path}/ /
+    }
+
+    root /var/www/html
+}
