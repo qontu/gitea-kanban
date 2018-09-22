@@ -5,7 +5,7 @@ node_modules
 # local env files
 .env.local
 .env.*.local
-src/gitea.config.json
+public/gitea.config.json
 
 # Log files
 npm-debug.log*

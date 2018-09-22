@@ -1,5 +1,6 @@
 <template>
   <div id="app" ref="app">
+    <h1 class="error" v-if="error">{{ error }}</h1>
     <div id="cover-spin" v-if="isLoading">
       <atom-spinner
           :animation-duration="1000"
@@ -35,8 +36,8 @@ import { oneLine } from "common-tags";
 import { Issue, StateType, Label } from "./models";
 import { StageList, Stage, Config, Block } from "./types";
 
-import { GiteaClient } from "./services/gitea-client.service";
-import giteaConfig from "./gitea.config.json";
+import { GiteaClient, GiteaClientConfig } from "./services/gitea-client.service";
+import { HttpService } from "./services/http.service";
 
 const fallbackConfig: Config = {
   stages: [
@@ -77,13 +78,13 @@ export default class App extends Vue {
   stages: StageList = new StageList([{ name: "" } as Stage]);
 
   blocks: Block[] = [];
+  error = "";
   private client: GiteaClient;
   private config: Config;
   private styles: HTMLStyleElement;
 
   constructor() {
     super();
-    this.client = new GiteaClient(giteaConfig);
   }
 
   async beforeCreate() {
@@ -96,6 +97,14 @@ export default class App extends Vue {
   }
 
   async created() {
+    try {
+      this.client = await this.createGiteaClient();
+    } catch {
+      this.error = "PLEASE, PROVIDE A gitea.config.json FILE IN YOUR HTTP SERVER";
+      console.error(this.error);
+      return;
+    }
+
     try {
       this.config = await this.loadConfig();
     } catch {
@@ -111,6 +120,11 @@ export default class App extends Vue {
 
   mounted() {
     (this.$refs.app as Element).appendChild(this.styles);
+  }
+
+  async createGiteaClient(): Promise<GiteaClient> {
+    const config = await new HttpService().get<GiteaClientConfig>("gitea.config.json");
+    return new GiteaClient(config);
   }
 
   async updateBlock(issueID: string, newStage: string) {
@@ -209,6 +223,12 @@ export default class App extends Vue {
 </script>
 
 <style lang="scss">
+.error {
+  background-color: red;
+  text-align: center;
+  border-radius: 50px;
+}
+
 #cover-spin {
   position: fixed;
   width: 100%;

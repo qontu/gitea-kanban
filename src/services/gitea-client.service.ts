@@ -2,7 +2,7 @@ import { HttpService } from "./http.service";
 import { Issue, StateType } from "../models/issue";
 import { Label } from "../models/label";
 
-interface GiteaClientConfig {
+export interface GiteaClientConfig {
   token: string;
   baseUrl: string;
   repositoryOwner: string;
