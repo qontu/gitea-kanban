@@ -35,8 +35,8 @@ export default class App extends Vue {
   async beforeCreate() {
     try {
       this.config = await new HttpService().get<GiteaClientConfig>("gitea.config.json");
-    } catch {
-      this.error = "Error fetching config";
+    } catch (error) {
+      this.onError({ message: "Error fetching config", context: error });
     }
   }
 
@@ -44,8 +44,9 @@ export default class App extends Vue {
     this.isLoading = isLoading;
   }
 
-  onError(error: string) {
-    this.error = error;
+  onError({ message, context }: { message: string; context: Error }) {
+    console.error(context);
+    this.error = message;
     this.setLoading(false);
   }
 }

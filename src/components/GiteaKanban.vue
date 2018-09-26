@@ -103,8 +103,8 @@ export default class GiteaKanban extends Vue {
       this.setStyles();
 
       await this.loadIssues();
-    } catch {
-      this.$emit("error", "Error fetching labels or issues from gitea");
+    } catch (error) {
+      this.$emit("error", { message: "Error fetching labels or issues from gitea", context: error });
     }
   }
 

@@ -1,3 +1,5 @@
+import { HTTPError } from "./http.error";
+
 export interface RequestOptions extends RequestInit {
   noJSON?: boolean;
 }
@@ -35,9 +37,20 @@ export class HttpService {
       ...this.options,
       ...options,
       method,
-    } as RequestInit).then(res => {
-      return options.noJSON ? res.text() : res.json();
-    });
+    } as RequestInit)
+      .then(res => {
+        if (!res.ok) {
+          return res.text().then(reason => {
+            console.log("throw", reason);
+            throw new HTTPError(reason, res);
+          }) as Promise<Response>;
+        }
+
+        return res;
+      })
+      .then(res => {
+        return options.noJSON ? res.text() : res.json();
+      });
   }
 
   private prepareBody(body: any, options: RequestOptions) {

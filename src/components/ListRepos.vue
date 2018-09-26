@@ -42,8 +42,8 @@ export default class ListRepos extends Vue {
       });
 
       this.repos = await this.client.getRepos();
-    } catch {
-      this.$emit("error", "Error fetching repos of user");
+    } catch (error) {
+      this.$emit("error", { message: "Error fetching repos of user", context: error });
     }
   }
 
