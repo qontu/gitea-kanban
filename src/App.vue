@@ -8,9 +8,8 @@
           :color="'#ff1d5e'"
       />
     </div>
-    <gitea-kanban v-if="config" @loading="isLoading = $event" @error="error = $event; isLoading = false"
-    :owner="config.repositoryOwner" :repo="config.repositoryName"
-    :token="config.token" :baseUrl="config.baseUrl"></gitea-kanban>
+    <router-view v-if="config" :config="config"
+    @error="onError($event)" @loading="setLoading($event)"></router-view>
   </div>
 </template>
 
@@ -20,15 +19,12 @@ import { AtomSpinner } from "epic-spinners";
 import { oneLine } from "common-tags";
 import GiteaKanban from "./components/GiteaKanban.vue";
 
-import { Config } from "./types";
-
 import { GiteaClient, GiteaClientConfig } from "./services/gitea-client.service";
 import { HttpService } from "./services/http.service";
 
 @Component({
   components: {
     AtomSpinner,
-    GiteaKanban,
   },
 })
 export default class App extends Vue {
@@ -39,15 +35,18 @@ export default class App extends Vue {
   async beforeCreate() {
     try {
       this.config = await new HttpService().get<GiteaClientConfig>("gitea.config.json");
-      this.config.repositoryOwner = this.$route.params.owner;
-      this.config.repositoryName = this.$route.params.repo;
     } catch {
-      const error = "PLEASE, PROVIDE A gitea.config.json FILE IN YOUR HTTP SERVER";
-      console.error(error);
-      this.error = error;
-      this.isLoading = false;
-      return;
+      this.error = "Error fetching config";
     }
+  }
+
+  setLoading(isLoading: boolean) {
+    this.isLoading = isLoading;
+  }
+
+  onError(error: string) {
+    this.error = error;
+    this.setLoading(false);
   }
 }
 </script>
@@ -56,7 +55,6 @@ export default class App extends Vue {
 .error {
   background-color: red;
   text-align: center;
-  border-radius: 50px;
 }
 
 #cover-spin {

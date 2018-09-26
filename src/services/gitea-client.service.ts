@@ -1,16 +1,16 @@
 import { HttpService } from "./http.service";
-import { Issue, StateType } from "../models/issue";
-import { Label } from "../models/label";
+import { Issue, StateType, Repository, Label } from "../models";
 
 export interface GiteaClientConfig {
   token: string;
   baseUrl: string;
-  repositoryOwner: string;
-  repositoryName: string;
+  repositoryOwner?: string;
+  repositoryName?: string;
 }
 
 export class GiteaClient {
   private baseURL: string;
+  private baseAPIURL: string;
   private apiURL: string;
   private repoURL: string;
   private repositoryOwner: string;
@@ -24,7 +24,8 @@ export class GiteaClient {
     this.token = config.token;
 
     this.baseURL = config.baseUrl;
-    this.apiURL = `${this.baseURL}/api/v1/repos/${this.repositoryOwner}/${this.repositoryName}`;
+    this.baseAPIURL = `${this.baseURL}/api/v1`;
+    this.apiURL = `${this.baseAPIURL}/repos/${this.repositoryOwner}/${this.repositoryName}`;
     this.repoURL = `${this.baseURL}${this.repositoryOwner}/${this.repositoryName}`;
 
     this.http = new HttpService({
@@ -45,6 +46,10 @@ export class GiteaClient {
     const closed = await this.http.get<Issue[]>(`${this.apiURL}/issues?q=&state=${StateType.CLOSED}`);
 
     return [...open, ...closed];
+  }
+
+  getRepos() {
+    return this.http.get<Repository[]>(`${this.baseAPIURL}/user/repos`);
   }
 
   getIssues() {
