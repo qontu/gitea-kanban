@@ -26,7 +26,7 @@ export class GiteaClient {
     this.baseURL = config.baseUrl;
     this.baseAPIURL = `${this.baseURL}/api/v1`;
     this.apiURL = `${this.baseAPIURL}/repos/${this.repositoryOwner}/${this.repositoryName}`;
-    this.repoURL = `${this.baseURL}${this.repositoryOwner}/${this.repositoryName}`;
+    this.repoURL = `${this.baseURL}/${this.repositoryOwner}/${this.repositoryName}`;
 
     this.http = new HttpService({
       cache: "no-cache",
